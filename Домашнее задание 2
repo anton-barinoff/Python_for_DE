@@ -1,0 +1,59 @@
+# задание 1
+
+# Печатные газеты использовали свой формат дат для каждого выпуска. Для каждой газеты из списка напишите формат указанной даты для перевода в объект datetime:
+from datetime import datetime
+
+# The Moscow Times - Wednesday, October 2, 2002
+date_string_1 = "Wednesday, October 2, 2002"
+date_datetime_1 = datetime.strptime(date_string_1, "%A, %B %d, %Y")
+print(f"The Moscow Times: {date_datetime_1}")
+
+# The Guardian - Friday, 11.10.13
+date_string_2 = "Friday, 11.10.13"
+date_datetime_2 = datetime.strptime(date_string_2, "%A, %d.%m.%y")
+print(f"The Guardian: {date_datetime_2}")
+
+# Daily News - Thursday, 18 August 1977
+date_string_3 = "Thursday, 18 August 1977"
+date_datetime_3 = datetime.strptime(date_string_3, "%A, %d %B %Y")
+print(f"Daily News: {date_datetime_3}")
+
+
+
+
+# задание 2
+
+from datetime import datetime
+from datetime import timedelta
+
+# ввод дат в формате YYYY-MM-DD
+start_date = input("Введите дату начала в формате YYYY-MM-DD: ")
+end_date = input("Введите дату конца в формате YYYY-MM-DD: ")
+
+# функция date_range, которая возвращает список дат за период от start_date до end_date
+def date_range(start_date, end_date):
+
+    try:
+        # перевод в datetime 
+        start_date_dt = datetime.strptime(start_date, '%Y-%m-%d')
+        end_date_dt = datetime.strptime(end_date, '%Y-%m-%d')
+
+        # проверка если start_date > end_date должен возвращаться пустой список
+        if start_date_dt > end_date_dt:
+            return []
+
+        # список дат
+        dates_list = []
+        current_dt = start_date_dt
+
+        while current_dt <= end_date_dt:
+            dates_list.append(current_dt.strftime('%Y-%m-%d'))
+            current_dt += timedelta(days=1)
+
+        return dates_list
+        
+    except ValueError:
+        # проверка если формат ввода даты не YYYY-MM-DD должен возвращаться пустой список
+        return []
+
+print(date_range(start_date, end_date))
