@@ -1,0 +1,33 @@
+# задание 1
+word = "test"
+# word = 'testing'
+
+middle_index = len(word) // 2
+
+if len(word) % 2 == 0:
+    # число букв чётное - две средние буквы
+    print(word[middle_index - 1] + word[middle_index])
+else:
+    # число букв нечётное - одна средняя буква
+    print(word[middle_index])
+
+
+# задание 2
+# списки юношей и девушек
+boys = sorted(['Peter', 'Alex', 'John', 'Arthur', 'Richard']) 
+# boys = sorted(['Peter', 'Alex', 'John', 'Arthur', 'Richard', 'Michael'])
+girls = sorted(['Kate', 'Liza', 'Kira', 'Emma', 'Trisha'])
+
+print("Результат:")
+
+# проверка совпадения количества элементов в списках
+if len(boys) == len(girls):
+
+    # если совпадают
+    print("Идеальные пары:")
+    for boys, girls in zip(boys, girls):
+        print(f"{boys} и {girls}")
+
+    # если не совпадают
+else:
+    print(f"Внимание, кто-то может остаться без пары!")
