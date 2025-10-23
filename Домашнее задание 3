@@ -1,0 +1,138 @@
+import pandas as pd
+
+df = pd.read_csv(r'...\Electronic_sales_Sep2023-Sep2024.csv')
+
+# очистка данных от отменённых заказов
+df = df[df['Order Status'] == 'Completed']
+
+# добавление столбца с общими тратами (продукт + доп. услуги)
+df['Total Spend'] = df['Total Price'] + df['Add-on Total']
+
+
+# Задание 1
+# На основании датасета для каждого покупателя получите:
+  # предпочитаемый метод оплаты; 
+  # общие траты;
+  # количество денег, потраченных на дополнительные услуги и аксессуары.
+
+df1 = df.groupby('Customer ID').agg(
+    **{
+        'Preferred Payment Method': ('Payment Method', lambda x: x.mode().iloc[0]), # предпочитаемый метод оплаты
+        'Total Spend Amount': ('Total Spend', 'sum'), # общие траты
+        'Add-ons Spend Amount': ('Add-on Total', 'sum') # траты на доп. услуги и аксессуары
+}).reset_index()
+
+
+# Задание 2
+# 1) На основании датасета получите доход:
+  # по каждому методу доставки, 
+  # по каждому типу продукта, 
+  # по дополнительным услугам за каждый месяц,
+  # по дополнительным услугам за каждый квартал.
+
+df2 = df.copy()
+
+df2['Purchase Date'] = pd.to_datetime(df2['Purchase Date']) # конвертация Series в формат datetime
+
+df2['Month'] = df2['Purchase Date'].dt.to_period('M').astype(str) # месяц из даты покупки,  конвертация в фомат string для последующей работы с визуализацией
+df2['Quarter'] = df2['Purchase Date'].dt.to_period('Q').astype(str) # квартал из даты покупки, конвертация в фомат string для последующей работы с визуализацией
+
+
+df2 = df2.groupby([
+    'Shipping Type', # метод доставки
+    'Product Type', # тип продукта
+    'Month',
+    'Quarter'
+]).agg({
+    'Total Spend': 'sum', # доход от продуктов
+    'Add-on Total': 'sum' # доход от доп. услуг      
+}).reset_index()
+
+# cортировка датасета
+df2.sort_values(['Shipping Type', 'Product Type', 'Month', 'Quarter', 'Total Spend', 'Add-on Total'], ascending=[True, True, True, True, False, False], inplace=True)
+
+
+# 2) Отобразите полученные данные на графике.
+import matplotlib.pyplot as plt 
+import seaborn as sns
+
+# Доход по каждому методу доставки
+df_to_plot = df2.copy()
+
+sns.set(style='darkgrid')
+plt.figure(figsize=(15, 7))
+
+# сортировка по доходу desc
+df_to_plot = df_to_plot.groupby('Shipping Type')['Total Spend'].sum() 
+df_to_plot = df_to_plot.sort_values(ascending=False).reset_index() 
+
+# столбчатая диаграмма распределения
+sns.barplot(data=df_to_plot, x='Shipping Type', y='Total Spend', hue='Shipping Type', palette='Accent')
+plt.title('Распределение дохода по методу доставки')
+plt.xlabel('Метод доставки')
+plt.ylabel('Сумма дохода')
+plt.grid(True)
+plt.show()
+
+del df_to_plot
+
+
+# Доход по каждому типу продукта
+df_to_plot = df2.copy()
+
+sns.set(style='darkgrid')
+plt.figure(figsize=(15, 7))
+
+# сортировка по доходу desc
+df_to_plot = df_to_plot.groupby('Product Type')['Total Spend'].sum() 
+df_to_plot = df_to_plot.sort_values(ascending=False).reset_index() 
+
+# столбчатая диаграмма распределения
+sns.barplot(data=df_to_plot, x='Product Type', y='Total Spend', hue='Product Type', palette='Accent')
+plt.title('Распределение дохода по типу продукта')
+plt.xlabel('Тип продукта')
+plt.ylabel('Сумма дохода')
+plt.grid(True)
+plt.show()
+
+del df_to_plot
+
+
+# Доход по дополнительным услугам за каждый месяц
+df_to_plot = df2.copy()
+
+sns.set(style='darkgrid')
+plt.figure(figsize=(15, 7))
+
+# линейный график тренда
+df_to_plot = df_to_plot.groupby('Month')['Add-on Total'].sum().reset_index()
+sns.lineplot(data=df_to_plot, x='Month', y='Add-on Total', marker='o')
+plt.title('Динамика дохода от дополнительных услуг по месяцам')
+plt.xlabel('Месяц')
+plt.ylabel('Сумма дохода')
+plt.xticks(rotation=45)
+plt.grid(True)
+plt.tight_layout()
+plt.show()
+
+del df_to_plot
+
+
+# Доход по дополнительным услугам за каждый квартал
+df_to_plot = df2.copy()
+
+sns.set(style='darkgrid')
+plt.figure(figsize=(15, 7))
+
+# линейный график тренда
+df_to_plot = df_to_plot.groupby('Quarter')['Add-on Total'].sum().reset_index()
+sns.lineplot(data=df_to_plot, x='Quarter', y='Add-on Total', marker='o')
+plt.title('Динамика дохода от дополнительных услуг по кварталам')
+plt.xlabel('Квартал')
+plt.ylabel('Сумма дохода')
+plt.xticks(rotation=45)
+plt.grid(True)
+plt.tight_layout()
+plt.show()
+
+del df_to_plot
