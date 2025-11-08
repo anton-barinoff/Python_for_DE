@@ -1,0 +1,698 @@
+import json
+import os
+import re
+from datetime import datetime
+from typing import Any, Dict, List, Optional
+
+import matplotlib.pyplot as plt
+import pandas as pd
+import seaborn as sns
+
+
+class Account:
+    """
+    Класс для моделирования поведения банковского счета.
+    
+    Ведёт детальный учёт всех действий и предоставляет аналитику 
+    по истории операций.
+    """
+    # Приватный атрибут класса для хранения количества созданных счетов
+    _account_counter: int = 100000  # Отсчёт начинается с 100000
+    
+    # Атрибуты для хранения загруженных и очищенных операций
+    _loaded_history: List[Dict[str, Any]]
+    _cleaned_history: List[Dict[str, Any]]
+
+    @staticmethod
+    def _validate_balance(balance_value) -> None:
+        """
+        Валидирует баланс счёта: является неотрицательным числом.
+        
+        Args:
+            balance_value(float): Значение баланса для проверки.
+            
+        Raises:
+            ValueError: Если баланс счёта отрицательный.
+            TypeError: Если баланс счёта не является числом.
+        """
+        if not isinstance(balance_value, (int, float)):
+            raise TypeError("Баланс счёта должен быть числом")
+        if balance_value < 0:
+            raise ValueError("Баланс счёта не может быть отрицательным")
+        
+    def _validate_name(self, name: str) -> None:
+        """
+        Валидирует имя владельца счёта: формат "Имя Фамилия" 
+        с заглавных букв, кириллицей или латиницей.
+        
+        Args:
+            name: Имя для валидации.
+            
+        Raises:
+            ValueError: Если имя не соответствует формату.
+        """
+        if not isinstance(name, str):
+            raise TypeError("Имя владельца должно быть строкой")
+            
+        # Регулярное выражение для проверки формата "Имя Фамилия"
+        pattern = r'^[A-ZА-Я][a-zа-я]+\s[A-ZА-Я][a-zа-я]+$'
+        if not re.match(pattern, name):
+            raise ValueError(
+                "Имя владельца должно быть в формате 'Имя Фамилия' "
+                "с заглавных букв, кириллицей или латиницей"
+            )
+            
+    @staticmethod        
+    def _validate_amount(amount: float) -> None:
+        """
+        Валидирует сумму операции: является положительным числом.
+        
+        Args:
+            amount(float): Сумма операции для проверки.
+            
+        Raises:
+            ValueError: Если сумма операции не положительная.
+            TypeError: Если сумма операции не является числом.
+        """
+        if not isinstance(amount, (int, float)):
+            raise TypeError("Сумма операции должна быть числом")       
+        if amount <= 0:
+            raise ValueError("Сумма операции должна быть положительной")
+
+    @staticmethod
+    def _normalize_date(date_str: str) -> str:
+        """
+        Преобразует дату из различных форматов в единый стандарт.
+    
+        Args:
+            date_str: Дата в произвольном формате.
+        
+        Returns:
+            Дата в формате 'YYYY-MM-DD HH:MM:SS'.
+        
+        Raises:
+            ValueError: Если распарсинг даты невозможен.
+        """
+        date_str = date_str.strip()
+    
+        # Список возможных форматов дат
+        date_formats = [
+            '%Y-%m-%d %H:%M:%S', '%Y-%m-%d %H:%M',
+            '%d/%m/%Y %H:%M:%S', '%d/%m/%Y %H:%M',
+            '%m/%d/%Y %H:%M:%S', '%m/%d/%Y %H:%M',  # американский
+            '%d.%m.%Y %H:%M:%S', '%d.%m.%Y %H:%M'
+        ]
+        
+        for fmt in date_formats:
+            try:
+                dt = datetime.strptime(date_str, fmt)
+                # Возврат даты в едином формате
+                return dt.strftime('%Y-%m-%d %H:%M:%S')
+            except ValueError:
+                continue
+        
+        # Если ни один формат даты не подошел
+        raise ValueError(f"Неизвестный формат даты: {date_str}")
+                
+    def __init__(self, account_holder: str, balance: float = 0.0) -> None:  
+        """
+        Инициализирует банковский счет.
+        
+        Args:
+            account_holder (str): Имя владельца счёта в формате "Имя Фамилия".
+            balance (float, optional): Начальный баланс счёта. 
+            По умолчанию 0.0, не может быть отрицательным.
+            
+        Raises:
+            ValueError: Если баланс счёта отрицательный.
+            TypeError: Если тип параметров не соответствует ожидаемому.
+        """
+        # Валидация входных параметров
+        self._validate_name(account_holder)
+        self._validate_balance(balance)    
+        
+        # Инициализация атрибутов
+        # Атрибут для хранения имени владельца
+        self.holder: str = account_holder  
+        # Приватный атрибут для хранения текущего баланса
+        self._balance: float = balance    
+        # Атрибут для хранения номера счёта в формате 'ACC-XXXXXX'
+        self.account_number: str = f"ACC-{Account._account_counter}"
+        # Список словарей для хранения истории операций
+        self.operations_history: List[Dict[str, Any]] = []
+        
+        # Увеличение счётчика для следующего счёта
+        Account._account_counter += 1
+            
+    def deposit(self, amount: float) -> None:
+        """
+        Пополняет счёт на указанную сумму.
+    
+        Args:
+            amount (float): Сумма пополнения.
+        
+        Raises:
+            ValueError: Если сумма пополнения не положительная.
+            TypeError: Если сумма пополнения не является числом.
+        """
+        # Валидация суммы операции
+        self._validate_amount(amount)  
+
+        # Обновление баланса
+        self._balance += amount
+
+        # Создание записи об успешной операции
+        operation = {
+            'account_number': self.account_number,
+            'account_type': self.account_type,
+            'date': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            'operation': 'deposit',
+            'amount': amount,
+            'balance_after_operation': self._balance,
+            'status': 'success'
+        }
+        
+        # Добавление записи в историю операций
+        self.operations_history.append(operation)
+
+    def withdraw(self, amount: float) -> None:
+        """
+        Снимает средства со счёта.
+    
+        Args:
+            amount (float): Сумма снятия.
+        
+        Raises:
+            ValueError: Если сумма снятия не положительная.
+            TypeError: Если значение снятия не является числом.
+        """
+        # Валидация суммы операции
+        self._validate_amount(amount)
+          
+        # Проверка достаточности средств
+        if amount > self._balance:          
+            # Создание записи о неудачной операции
+            # Баланс остаётся неизменным
+            operation = {
+                'account_number': self.account_number,
+                'account_type': self.account_type,
+                'date': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                'operation': 'withdraw',
+                'amount': amount,
+                'balance_after_operation': self._balance,
+                'status': 'fail'
+            }
+        else:
+            # Обновление баланса при успешной операции
+            self._balance -= amount
+            # Создание записи об успешной операции
+            operation = {
+                'account_number': self.account_number,
+                'account_type': self.account_type,
+                'date': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                'operation': 'withdraw',
+                'amount': amount,
+                'balance_after_operation': self._balance,
+                'status': 'success'
+            }
+            
+        # Добавление записи в историю операций
+        self.operations_history.append(operation)
+        
+    def get_balance(self) -> float:
+        """
+        Возвращает текущий баланс счёта.
+        
+        Returns:
+            float: Текущий баланс счёта.
+        """
+        return self._balance
+
+    def get_history(self) -> List[Dict[str, Any]]:
+        """
+        Возвращает историю операций.
+
+        Returns:
+            Список словарей с информацией об операциях.
+        """
+        # Возврат копии вместо оригинала для безопасности
+        return self.operations_history.copy()
+
+    def plot_history(self) -> None:
+        """
+        Строит график изменения баланса с течением времени.
+        
+        Дополнительный метод для визуализации истории операций.
+        Использует библиотеки Pandas, Matplotlib и Seaborn для создания графика.
+
+        Returns:
+            Линейный график изменения баланса с течением времени.
+        """
+        # Проверка наличия данных для построения графика
+        if not self.operations_history:
+            print("Нет данных для построения графика")
+            return
+    
+        # Создание датафрейма из истории операций
+        df = pd.DataFrame(self.operations_history)
+    
+        # Фильтрация только успешных операций для графика
+        df_to_plot = df[df['status'] == 'success'].copy()
+
+        # Проверка наличия успешных операций.
+        if df_to_plot.empty:
+            print("Нет успешных операций для построения графика")
+            return
+    
+        # Преобразование даты в datetime для корректного построения графика
+        df_to_plot['date'] = pd.to_datetime(df_to_plot['date'])
+
+        # Сортировка операций по времени
+        df_to_plot = df_to_plot.sort_values('date')
+    
+        # Настройка стиля графика
+        sns.set(style='darkgrid')
+        plt.figure(figsize=(15, 7))
+
+        # Построение линейного графика
+        sns.lineplot(
+            data=df_to_plot, 
+            x='date', 
+            y='balance_after_operation', 
+            marker='o'
+        )
+
+        # Настройка заголовка и подписей осей
+        plt.title(
+            f"Динамика баланса счета {self.account_number}"
+            f"\nВладелец: {self.holder}", 
+            fontweight='bold'
+        )
+        plt.xlabel('Дата и время операции')
+        plt.ylabel('Баланс счета')
+
+        # Форматирование оси времени для лучшей читаемости
+        plt.xticks(rotation=45)
+        plt.tight_layout()
+
+        # Отображение графика
+        plt.show()
+
+    def get_last_large_operations(self, n: int = 5) ->  List[Dict[str, Any]]:
+        """
+        Возвращает последние n крупных операций, 
+        отсортированных по убыванию суммы и даты.
+    
+        Args:
+            n: Количество возвращаемых операций (по умолчанию 5).
+
+        Returns:
+        Список операций, отсортированных по убыванию суммы и даты.
+        
+        Raises:
+            ValueError: Если n не положительное число.
+        """
+        if n <= 0:
+            raise ValueError(
+                "Количество операций n должно быть положительным числом"
+            )
+          
+        # Сортировка операций
+        sorted_operations = sorted(
+            self.operations_history,
+            key=lambda opr: (
+                # По убыванию суммы
+                -opr['amount'],  
+                # По убыванию даты
+                -datetime.strptime(opr['date'], '%Y-%m-%d %H:%M:%S').timestamp()  
+            )
+        )
+        
+        # Вывод первых n операций
+        return sorted_operations[:n]
+        
+    @classmethod
+    def _load_raw_history(cls, file_path: str, 
+                          account_type: Optional[str] = None) -> Dict[str, int]:
+        """
+        Загружает историю операций из CSV или JSON файла.
+        
+        Поддерживает автоматическую фильтрацию по типу счёта 
+        при вызове через дочерние классы. 
+        
+        Конвертирует данные в единый формат 
+        и выполняет базовую валидацию.
+        
+        Args:
+            file_path: Путь к файлу с операциями (CSV или JSON).
+            account_type: Опциональный фильтр по типу счёта.
+                Если None, загружаются все операции.
+            
+        Returns:
+            Словарь со статистикой загрузки:
+            - 'Всего операций': общее количество обработанных записей;
+            - 'Загружено': количество успешно загруженных операций;
+            - 'Ошибок': количество операций с ошибками загрузки.
+
+        Raises:
+            FileNotFoundError: Если файл не существует.
+            ValueError: Если формат файла не поддерживается.
+        """
+        # Статистика загрузки
+        load_stats = {
+            'Всего операций': 0,
+            'Загружено': 0,
+            'Ошибок': 0
+        }
+          
+        # Список словарей для хранения неочищенной истории операций 
+        history_raw = []
+
+        try:
+            # Определение типа файла по расширению
+            file_ext = os.path.splitext(file_path)[1].lower()
+            if file_ext == '.json':
+                # Загрузка из JSON файла
+                with open(file_path, 'r', encoding='utf-8') as file:
+                    data = json.load(file)
+                    # Проверка: являются ли данные списком
+                    if not isinstance(data, list):
+                        print("Ошибка: JSON файл должен содержать список")
+                        return load_stats
+                    load_stats['Всего операций'] = len(data)    
+                    for i, operation_data in enumerate(data):
+                        try:
+                            # Cоздание нового словаря для каждой операции
+                            operation_raw = {
+                                'account_number': str(operation_data.get('account_number', '')),
+                                'account_type': str(operation_data.get('account_type', '')),
+                                'date': cls._normalize_date(str(operation_data.get('date', ''))),
+                                'operation': str(operation_data.get('operation', '')),
+                                'amount': float(operation_data.get('amount', '')),
+                                'balance_after_operation': float(operation_data.get('balance_after', '')),
+                                'status': str(operation_data.get('status', ''))
+                            }
+                            # Автоматическая фильтрация для дочерних классов
+                            calling_class = cls.__name__                        
+                            if calling_class != 'Account' and account_type is None:
+                                class_account_type = getattr(cls, 'account_type', None)
+                                if operation_raw['account_type'] == class_account_type:
+                                    history_raw.append(operation_raw)
+                                    load_stats['Загружено'] += 1
+                            else:
+                                if account_type is None or operation_raw['account_type'] == account_type:
+                                    history_raw.append(operation_raw)
+                                    load_stats['Загружено'] += 1            
+                        except Exception as e:
+                            load_stats['Ошибок'] += 1
+                            print(
+                                f"Ошибка загрузки операции {i}: {e} | "
+                                f"{operation_data}"
+                            )
+            else:
+                # Загрузка из CSV файла
+                with open(file_path, 'r', encoding='utf-8') as file:
+                    # Пропуск заголовка
+                    next(file)  
+                    for line_num, line in enumerate(file, 2):
+                        load_stats['Всего операций'] += 1
+                        try:                            
+                            fields = line.strip().split(',')
+                            # Cоздание нового словаря для каждой операции
+                            operation_raw = {
+                                'account_number': str(fields[0].strip()),
+                                'account_type': str(fields[1].strip()),
+                                'date': cls._normalize_date(str(fields[2])),
+                                'operation': str(fields[3].strip()),
+                                'amount': float(fields[4].strip()),
+                                'balance_after_operation': float(fields[5].strip()),
+                                'status': str(fields[6].strip())
+                            }
+                            # Определение контекста вызова
+                            calling_class = cls.__name__
+                            # Автоматическая фильтрация для дочерних классов
+                            if calling_class != 'Account' and account_type is None:
+                                # Вызвано из дочернего класса - автоматическая фильтрация
+                                class_account_type = getattr(cls, 'account_type', None)
+                                if operation_raw['account_type'] == class_account_type:
+                                    history_raw.append(operation_raw)
+                                    load_stats['Загружено'] += 1
+                            else:
+                                # Вызвано из Account или явно указан account_type
+                                if account_type is None or operation_raw['account_type'] == account_type:
+                                    history_raw.append(operation_raw)
+                                    load_stats['Загружено'] += 1        
+                        except Exception as e:
+                            load_stats['Ошибок'] += 1
+                            print(
+                                f"Ошибка загрузки строки {line_num}: {e} | " 
+                                f"{line}"
+                            )         
+        except Exception as e:
+            print(f"Ошибка загрузки файла: {e}")
+        
+        cls._loaded_history = history_raw
+        return load_stats     
+
+    @classmethod
+    def _clean_history(cls) -> Dict[str, int]:
+        """
+        Проверяет и очищает загруженные операции от невалидных данных.
+
+        Выполняет следующие проверки:
+        - Наличие всех обязательных полей;
+        - Корректность типа операции для данного класса счёта;
+        - Валидность суммы операции (положительное число);
+        - Валидность баланса (неотрицательное число);
+        - Корректность статуса операции.
+    
+        Returns:
+            Словарь со статистикой очистки:
+            - 'Всего операций': количество проверенных операций;
+            - 'Валидные': количество прошедших проверку операций;
+            - 'Невалидные': количество отфильтрованных операций.
+        """
+        # Статистика очистки
+        clean_stats = {
+            'Всего операций': len(cls._loaded_history),
+            'Валидные': 0,
+            'Невалидные': 0
+        }
+
+        # 1. Поиск источника данных
+        if hasattr(cls, '_loaded_history') and cls._loaded_history:
+            # Загрузка происходила через данный класс
+            source_operations = cls._loaded_history
+        elif hasattr(Account, '_loaded_history') and Account._loaded_history:
+            # Загрузка происходила через родительский класс
+            source_operations = Account._loaded_history
+        else:
+            print("Нет загруженных операций")
+            return clean_stats
+        
+        filtered_operations = [
+            opr for opr in source_operations 
+            if opr.get('account_type') == cls.account_type
+        ]
+        
+        history_clean = [] 
+        
+        for operation in filtered_operations:
+            try:
+                # 1. Проверка обязательных полей
+                if not all(field in operation for field in [
+                    'account_number', 'account_type', 'date', 
+                    'operation', 'amount', 'balance_after_operation', 'status'
+                ]):
+                    raise ValueError("Отсутствуют обязательные поля") 
+                # 2. Проверка допустимых типов операций
+                opr_type = operation['operation']
+                if cls.account_type == 'savings':
+                    if opr_type not in ['deposit', 'withdraw', 'interest']:
+                       raise ValueError(
+                           f"Недопустимый тип операции для счёта "
+                           f"{cls.account_type}: {opr_type}"
+                       )
+                else:  
+                    if opr_type not in ['deposit', 'withdraw']:
+                        raise ValueError(
+                            f"Недопустимый тип операции для счёта "
+                            f"{cls.account_type}: {opr_type}"
+                        )         
+                # 3. Проверка суммы операции (должна быть положительным числом)
+                amount = operation['amount']
+                cls._validate_amount(amount) 
+                # 4. Проверка баланса (должен быть неотрицательным числом)
+                balance = operation['balance_after_operation']
+                cls._validate_balance(balance)    
+                # 5. Проверка статуса
+                status = operation['status']
+                if status not in ['success', 'fail']:
+                    raise ValueError(f"Неверный статус: {status}")  
+                # Добавление операции после прохождения всех проверок
+                history_clean.append(operation)
+                clean_stats['Валидные'] += 1 
+            except (ValueError, TypeError):
+                clean_stats['Невалидные'] += 1
+    
+        # Сохраняем очищенные операции в класс
+        cls._cleaned_history = history_clean
+        return clean_stats
+        
+    def update_from_loaded_history(self) -> None:
+        """
+        Обновляет историю операций счёта на основе очищенных операций.
+        
+        Обновляет баланс счёта на основе последней успешной операции.
+        """
+        # Получение класса данного счёта
+        instance_class = self.__class__
+
+        # Фильтрация очищенных операций по номеру данного счёта
+        account_operations = [
+            opr for opr in instance_class._cleaned_history
+            if opr['account_number'] == self.account_number
+        ]
+
+        # Сортировка истории операций по дате
+        sorted_operations = sorted(
+            account_operations,
+            key=lambda opr: datetime.strptime(opr['date'], '%Y-%m-%d %H:%M:%S')
+        )
+        
+        # Обновление истории операций данного счёта
+        self.operations_history.extend(sorted_operations)
+        
+        # Фильтрация успешных операций
+        successful_oprs = [
+            opr for opr in self.operations_history 
+            if opr.get('status') == 'success'
+        ]
+        
+        # Обновление баланса на основе последней успешной операции
+        if successful_oprs:
+            last_opr = successful_oprs[-1]
+            self._balance = last_opr.get('balance_after_operation', self._balance)
+
+    
+class CheckingAccount(Account):
+    """
+    Отражает абстракцию базового поведения расчётного счёта.
+    
+    Наследуется от базового класса Account.
+    """
+    account_type = "checking"
+    
+    def __init__(self, account_holder: str, balance: float = 0.0) -> None:
+        """
+        Инициализирует расчётный счёт.
+        
+        Args:
+            account_holder: Имя владельца счёта в формате "Имя Фамилия".
+            balance: Начальный баланс счёта. 
+                По умолчанию 0.0, не может быть отрицательным.
+        """
+        super().__init__(account_holder, balance) 
+
+
+class SavingsAccount(Account):
+    """
+    Отражает абстракцию базового поведения сберегательного счёта.
+    
+    Наследуется от базового класса Account с дополнительными ограничениями
+    на снятие средств и возможностью начисления процентов.
+    """
+    account_type = "savings"
+    
+    def __init__(self, account_holder: str, balance: float = 0.0) -> None:
+        """
+        Инициализирует сберегательный счёт.
+        
+        Args:
+            account_holder: Имя владельца счёта в формате "Имя Фамиления".
+            balance: Начальный баланс счёта.
+            По умолчанию 0.0, не может быть отрицательным.
+        """
+        super().__init__(account_holder, balance)
+
+    def withdraw(self, amount: float) -> None:
+        """
+        Снимает средства со счёта с ограничением - нельзя снять более 50% от баланса.
+    
+        Args:
+            amount (float): Сумма снятия.
+        
+        Raises:
+            ValueError: Если сумма снятия не положительная 
+            или превышает 50% от баланса.
+            TypeError: Если сумма снятия не является числом.
+        """
+        # Валидация суммы операции
+        self._validate_amount(amount)
+          
+        # Проверка достаточности средств
+        # Нельзя снять больше 50% от баланса
+        if amount > (self._balance * 0.5):          
+            # Создание записи о неудачной операции
+            # Баланс остаётся неизменным
+            operation = {
+                'account_number': self.account_number,
+                'account_type': self.account_type,
+                'date': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                'operation': 'withdraw',
+                'amount': amount,
+                'balance_after_operation': self._balance,
+                'status': 'fail'
+            }
+        else:
+            # Обновление баланса при успешной операции
+            self._balance -= amount  
+            # Создание записи об успешной операции
+            operation = {
+                'account_number': self.account_number,
+                'account_type': self.account_type,
+                'date': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                'operation': 'withdraw',
+                'amount': amount,
+                'balance_after_operation': self._balance,
+                'status': 'success'
+            }
+        # Добавление записи в историю операций
+        self.operations_history.append(operation)    
+        
+    def apply_interest(self, rate: float) -> None:
+        """
+        Рассчитывает проценты на остаток по счёту.
+        
+        Args:
+            rate (float): Годовая процентная ставка (в десятичном виде).
+            
+        Raises:
+            ValueError: Если процентная ставка отрицательная.
+            TypeError: Если процентная ставка не является числом.
+        """
+        # Валидация значения процентной ставки
+        if not isinstance(rate, (int, float)):
+            raise TypeError("Процентная ставка должна быть числом")
+        if rate < 0:
+            raise ValueError("Процентная ставка не может быть отрицательной")
+
+        # Расчёт процентов на остаток по счёту
+        # Ограничение начисленных процентов до двух знаков после запятой
+        # для решения проблемы с плавающей точкой
+        interest_amount = round(self._balance * rate, 2)
+        self._balance += interest_amount
+
+        # Создание записи о начислении процентов на остаток по счёту
+        operation = {
+            'account_number': self.account_number,
+            'account_type': self.account_type,
+            'date': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            'operation': 'interest',
+            'amount': interest_amount,   
+            'balance_after_operation': self._balance,
+            'status': 'success',
+            'rate_used': rate  # Фиксация применённой ставки
+        }
+        # Добавление записи в историю операций
+        self.operations_history.append(operation)
